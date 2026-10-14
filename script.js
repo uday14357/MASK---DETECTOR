@@ -1,28 +1,24 @@
 /**
  * ==============================================================================
- * Smart Mask & Expression Detector
- * Core Engine: Camera Setup, Dual-Model Pipelines, Mirrored Overlays & Audio
+ * Smart Mask & Expression Detector - Enterprise AI Console
+ * Core Engine: Camera Setup, Dual-Model Pipelines, Mirrored Overlays & Telemetry
  * ==============================================================================
  */
 
 // Global Configuration
 const CONFIG = {
-  // Model directory paths
   FACE_API_MODELS_PATH: 'models',
   MASK_MODEL_JSON: 'mask_model/model.json',
   MASK_METADATA_JSON: 'mask_model/metadata.json',
 
-  // Face Detection Hyperparameters
   TINY_DETECTOR_OPTIONS: {
-    inputSize: 320,        // Fast inference size (160, 224, 320, 416, 512, 608)
+    inputSize: 320,        // 320x320 fast inference
     scoreThreshold: 0.5    // Minimum face detection confidence
   },
 
-  // Mask Detection Threshold
   MASK_CONFIDENCE_THRESHOLD: 0.65,
-
-  // Audio Alerts Debounce (in milliseconds)
-  AUDIO_DEBOUNCE_MS: 3000
+  AUDIO_DEBOUNCE_MS: 3000,
+  MAX_AUDIT_LOGS: 12
 };
 
 // Emotion Mapping with descriptive emojis
@@ -41,56 +37,76 @@ const state = {
   isCameraReady: false,
   isFaceApiReady: false,
   isMaskModelReady: false,
-  maskModelType: 'none', // 'teachable_machine' or 'landmark_heuristic'
+  maskModelType: 'none',
   
-  // Detection tracking
+  // Counters & Telemetry
   activeFaceCount: 0,
   maskDetectedCount: 0,
   noMaskDetectedCount: 0,
+  totalInferences: 0,
   
-  // Animation & FPS tracking
+  // Latency & FPS
   lastFrameTime: performance.now(),
   frameCount: 0,
   currentFps: 0,
+  lastInferenceDuration: 0,
   animationId: null,
 
-  // Audio state
+  // Audio State
   isAudioMuted: false,
   lastAudioTrigger: 0,
-  previousState: 'none', // 'mask', 'nomask', 'none'
+  previousState: 'none',
 
-  // Offscreen canvas for face cropping
+  // Offscreen Canvas for Face Cropping
   cropCanvas: document.createElement('canvas'),
-  cropCtx: null
+  cropCtx: null,
+
+  // Audit Logs
+  auditLogs: []
 };
 
-// DOM Element References
+// DOM References
 const elements = {
   video: document.getElementById('webcam'),
   overlay: document.getElementById('overlay'),
   videoContainer: document.getElementById('videoContainer'),
   
-  // Status Banners & Pills
+  // Primary Banner & Status Badges
   statusBanner: document.getElementById('statusBanner'),
   bannerEmoji: document.getElementById('bannerEmoji'),
   bannerHeading: document.getElementById('bannerHeading'),
   bannerSubtext: document.getElementById('bannerSubtext'),
+  bannerPill: document.getElementById('bannerPill'),
   
-  statusPill: document.getElementById('statusPill'),
-  pillLabel: document.getElementById('pillLabel'),
-  pillConfidence: document.getElementById('pillConfidence'),
-  
+  statusBadge: document.getElementById('statusBadge'),
+  statusBadgeText: document.getElementById('statusBadgeText'),
+  statusFootnote: document.getElementById('statusFootnote'),
+  viewportTag: document.getElementById('viewportTag'),
+  maskEngineType: document.getElementById('maskEngineType'),
+  valResolution: document.getElementById('valResolution'),
+
   // System Health Pills
   pillCamera: document.getElementById('pillCamera'),
   pillFaceApi: document.getElementById('pillFaceApi'),
   pillMaskModel: document.getElementById('pillMaskModel'),
 
-  // HUD & Counters
+  // HUD & Telemetry
   fpsValue: document.getElementById('fpsValue'),
   faceCountValue: document.getElementById('faceCountValue'),
+  latencyValue: document.getElementById('latencyValue'),
+  
   statMaskCount: document.getElementById('statMaskCount'),
   statNoMaskCount: document.getElementById('statNoMaskCount'),
   statActiveFaces: document.getElementById('statActiveFaces'),
+  statComplianceRate: document.getElementById('statComplianceRate'),
+  
+  barMaskFill: document.getElementById('barMaskFill'),
+  barNoMaskFill: document.getElementById('barNoMaskFill'),
+  barActiveFill: document.getElementById('barActiveFill'),
+  barRateFill: document.getElementById('barRateFill'),
+
+  // Audit Event Log
+  auditTableBody: document.getElementById('auditTableBody'),
 
   // Modals & Overlays
   loadingOverlay: document.getElementById('loadingOverlay'),
@@ -114,14 +130,9 @@ state.cropCanvas.width = 224;
 state.cropCanvas.height = 224;
 state.cropCtx = state.cropCanvas.getContext('2d');
 
-// Canvas 2D Rendering Context
 const ctx = elements.overlay.getContext('2d');
-
-// Custom Teachable Machine Model Instance
 let customMaskModel = null;
 let detectorOptions = null;
-
-// Web Audio API Context (Lazily initialized on first user gesture)
 let audioCtx = null;
 
 function getAudioContext() {
@@ -139,8 +150,7 @@ function getAudioContext() {
 
 /**
  * ==============================================================================
- * Section 1: Synthetic Audio Alert Engine (Web Audio API)
- * Zero external audio files required — reliable, instant, and crisp.
+ * Section 1: Synthetic Audio Alerts
  * ==============================================================================
  */
 function playToneAlert(type) {
@@ -155,23 +165,19 @@ function playToneAlert(type) {
     state.lastAudioTrigger = now;
 
     if (type === 'mask') {
-      // Pleasant rising high chime for Mask Compliance
       const osc = actx.createOscillator();
       const gain = actx.createGain();
       osc.type = 'sine';
       osc.frequency.setValueAtTime(660, actx.currentTime);
       osc.frequency.exponentialRampToValueAtTime(1100, actx.currentTime + 0.22);
-      
       gain.gain.setValueAtTime(0.12, actx.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.001, actx.currentTime + 0.35);
-
       osc.connect(gain);
       gain.connect(actx.destination);
       osc.start();
       osc.stop(actx.currentTime + 0.36);
 
     } else if (type === 'nomask') {
-      // Distinct double alert ping for No Mask Warning
       const playBeep = (freq, startTime, duration) => {
         const osc = actx.createOscillator();
         const gain = actx.createGain();
@@ -184,23 +190,21 @@ function playToneAlert(type) {
         osc.start(startTime);
         osc.stop(startTime + duration);
       };
-
       playBeep(440, actx.currentTime, 0.15);
       playBeep(330, actx.currentTime + 0.18, 0.2);
     }
   } catch (err) {
-    console.warn('Audio alert playback error:', err);
+    console.warn('Audio playback error:', err);
   }
 }
 
 /**
  * ==============================================================================
- * Section 2: Model Loading (face-api.js & Teachable Machine)
+ * Section 2: Model Loading
  * ==============================================================================
  */
 async function loadAllModels() {
   try {
-    // 1. Load face-api.js weights (TinyFaceDetector, FaceLandmark68Net, FaceExpressionNet)
     elements.loadingDetail.textContent = 'Loading Face Detection & Expression Networks...';
     elements.loadingBar.style.width = '35%';
 
@@ -216,29 +220,29 @@ async function loadAllModels() {
     elements.pillFaceApi.classList.add('pill--ready');
     elements.loadingBar.style.width = '70%';
 
-    // 2. Load Teachable Machine Mask Model
-    elements.loadingDetail.textContent = 'Checking custom Mask Classifier in /mask_model...';
+    // Load Teachable Machine Mask Model
+    elements.loadingDetail.textContent = 'Verifying Mask Classifier in /mask_model...';
     try {
       if (window.tmImage && typeof window.tmImage.load === 'function') {
         customMaskModel = await window.tmImage.load(CONFIG.MASK_MODEL_JSON, CONFIG.MASK_METADATA_JSON);
         state.isMaskModelReady = true;
         state.maskModelType = 'teachable_machine';
         elements.pillMaskModel.classList.add('pill--ready');
-        elements.pillMaskModel.innerHTML = '<span class="dot"></span> Mask Net (TM)';
-        console.log('Teachable Machine mask model loaded successfully.');
+        elements.maskEngineType.textContent = 'Teachable Machine';
+        console.log('Teachable Machine mask model loaded.');
       } else {
-        throw new Error('tmImage library not present, using landmark heuristic.');
+        throw new Error('tmImage unavailable');
       }
     } catch (tmErr) {
-      // Fallback: If custom TM weights are missing, gracefully activate landmark occlusion classifier
-      console.info('Teachable Machine model not found or in training. Activating Smart Landmark Occlusion Classifier.', tmErr);
+      console.info('Using Landmark Occlusion Classifier fallback.', tmErr);
       state.isMaskModelReady = true;
       state.maskModelType = 'landmark_heuristic';
       elements.pillMaskModel.classList.add('pill--fallback');
-      elements.pillMaskModel.innerHTML = '<span class="dot"></span> Mask (Heuristic)';
+      elements.maskEngineType.textContent = 'Landmark Occlusion Net';
     }
 
     elements.loadingBar.style.width = '100%';
+    addAuditLog('System', 'Models Loaded', '100%', 'info');
     return true;
 
   } catch (error) {
@@ -250,12 +254,12 @@ async function loadAllModels() {
 
 /**
  * ==============================================================================
- * Section 3: Camera Setup & Permission Handling
+ * Section 3: Camera Setup
  * ==============================================================================
  */
 async function setupWebcam() {
   try {
-    elements.loadingDetail.textContent = 'Requesting camera permissions...';
+    elements.loadingDetail.textContent = 'Connecting to camera hardware...';
 
     const constraints = {
       video: {
@@ -274,6 +278,13 @@ async function setupWebcam() {
         elements.video.play();
         state.isCameraReady = true;
         elements.pillCamera.classList.add('pill--ready');
+        
+        const w = elements.video.videoWidth || 640;
+        const h = elements.video.videoHeight || 480;
+        if (elements.valResolution) {
+          elements.valResolution.textContent = `${w} × ${h}`;
+        }
+        addAuditLog('Camera', 'Stream Active', 'Ready', 'info');
         resolve(true);
       };
     });
@@ -291,7 +302,7 @@ function showCameraError(error) {
   elements.cameraErrorModal.classList.remove('hidden');
   
   if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
-    elements.cameraErrorMsg.textContent = 'Camera permission was denied. Please click the camera icon in your browser URL bar, allow camera access, and click Retry.';
+    elements.cameraErrorMsg.textContent = 'Camera permission was denied. Please allow camera permissions in your browser address bar and click Reconnect Camera.';
   } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
     elements.cameraErrorMsg.textContent = 'No webcam was detected on your system. Please connect a camera and try again.';
   } else {
@@ -301,15 +312,12 @@ function showCameraError(error) {
 
 /**
  * ==============================================================================
- * Section 4: Mask Classification Strategy
- * Combines Custom Teachable Machine inference with FaceLandmark Occlusion analysis.
+ * Section 4: Mask Classification
  * ==============================================================================
  */
 async function classifyFaceMask(video, box, landmarks) {
-  // Option A: Custom Teachable Machine Neural Network
   if (state.maskModelType === 'teachable_machine' && customMaskModel) {
     try {
-      // Crop the face from the video feed into 224x224 offscreen canvas
       const x = Math.max(0, box.x);
       const y = Math.max(0, box.y);
       const w = Math.min(box.width, video.videoWidth - x);
@@ -318,10 +326,7 @@ async function classifyFaceMask(video, box, landmarks) {
       state.cropCtx.clearRect(0, 0, 224, 224);
       state.cropCtx.drawImage(video, x, y, w, h, 0, 0, 224, 224);
 
-      // Run Teachable Machine prediction inside tf.tidy to avoid tensor leaks
       const predictions = await customMaskModel.predict(state.cropCanvas);
-      
-      // Look for labels matching mask/withmask
       let maskProb = 0;
       let noMaskProb = 0;
 
@@ -329,35 +334,30 @@ async function classifyFaceMask(video, box, landmarks) {
         const cleanName = p.className.toLowerCase().replace(/[^a-z]/g, '');
         if (cleanName.includes('withmask') || cleanName === 'mask') {
           maskProb = p.probability;
-        } else if (cleanName.includes('nomask') || cleanName.includes('withoutmask') || cleanName === 'nomask') {
+        } else if (cleanName.includes('nomask') || cleanName.includes('withoutmask')) {
           noMaskProb = p.probability;
         }
       }
 
       const isMask = maskProb >= CONFIG.MASK_CONFIDENCE_THRESHOLD;
       const confidence = isMask ? maskProb : (noMaskProb || (1 - maskProb));
-      
       return { isMask, confidence };
 
     } catch (err) {
-      console.warn('TM model inference error, using landmark heuristic fallback:', err);
+      console.warn('TM inference error, falling back:', err);
     }
   }
 
-  // Option B: Smart Facial Landmark Occlusion Classifier (68 points)
-  // When a person is wearing a medical or fabric mask, the lower landmarks (mouth 48-67 & nose tip 30-35)
-  // exhibit high geometric collapse or distinct color uniformity across the lower half.
+  // Landmark Occlusion & Lower-Face Texture Analysis Fallback
   if (landmarks) {
     const mouthPoints = landmarks.getMouth();
     const nosePoints = landmarks.getNose();
     const jawPoints = landmarks.getJawOutline();
 
-    // Calculate lower facial region bounding area
     const mouthHeight = Math.abs(mouthPoints[9].y - mouthPoints[3].y);
     const faceHeight = Math.abs(jawPoints[8].y - nosePoints[0].y);
     const mouthToFaceRatio = mouthHeight / (faceHeight || 1);
 
-    // Compute color variance in the lower face triangle (between nose base and chin)
     const lowerFaceX = Math.max(0, Math.floor(box.x + box.width * 0.2));
     const lowerFaceY = Math.max(0, Math.floor(box.y + box.height * 0.5));
     const lowerFaceW = Math.max(10, Math.floor(box.width * 0.6));
@@ -380,7 +380,6 @@ async function classifyFaceMask(video, box, landmarks) {
     const gAvg = gSum / count;
     const bAvg = bSum / count;
 
-    // Variance check
     let variance = 0;
     for (let i = 0; i < imgData.length; i += 16) {
       const diff = Math.abs(imgData[i] - rAvg) + Math.abs(imgData[i+1] - gAvg) + Math.abs(imgData[i+2] - bAvg);
@@ -388,10 +387,8 @@ async function classifyFaceMask(video, box, landmarks) {
     }
     const avgVariance = variance / count;
 
-    // Masks have lower mouth-opening variance and uniform surgical/cloth texture
     const isMaskByOcclusion = mouthToFaceRatio < 0.08 || avgVariance < 28;
     const confidence = isMaskByOcclusion ? 0.88 : 0.92;
-
     return { isMask: isMaskByOcclusion, confidence };
   }
 
@@ -428,7 +425,7 @@ function getDominantEmotion(expressions) {
 
 /**
  * ==============================================================================
- * Section 6: Real-Time Detection Loop & Canvas Drawing
+ * Section 6: Real-Time Detection Loop
  * ==============================================================================
  */
 async function runDetectionLoop() {
@@ -437,7 +434,7 @@ async function runDetectionLoop() {
     return;
   }
 
-  // Calculate FPS
+  // FPS calculation
   const now = performance.now();
   state.frameCount++;
   if (now - state.lastFrameTime >= 1000) {
@@ -447,7 +444,7 @@ async function runDetectionLoop() {
     state.lastFrameTime = now;
   }
 
-  // Synchronize Overlay Canvas dimensions with Video Display Size
+  // Match overlay dimensions
   const displayWidth = elements.video.clientWidth || 640;
   const displayHeight = elements.video.clientHeight || 480;
 
@@ -456,18 +453,25 @@ async function runDetectionLoop() {
     elements.overlay.height = displayHeight;
   }
 
+  const tStart = performance.now();
+
   try {
-    // 1. Run face-api multi-face detection with landmarks and expressions
+    // 1. Multi-face inference
     const detections = await faceapi
       .detectAllFaces(elements.video, detectorOptions)
       .withFaceLandmarks()
       .withFaceExpressions();
 
+    state.lastInferenceDuration = Math.round(performance.now() - tStart);
+    if (elements.latencyValue) {
+      elements.latencyValue.textContent = `${state.lastInferenceDuration} ms`;
+    }
+
     state.activeFaceCount = detections.length;
     elements.faceCountValue.textContent = detections.length;
     elements.statActiveFaces.textContent = detections.length;
+    updateBarMeters();
 
-    // Handle "No face detected" state
     if (detections.length === 0) {
       ctx.clearRect(0, 0, displayWidth, displayHeight);
       updateNoFaceState();
@@ -480,7 +484,6 @@ async function runDetectionLoop() {
     const scaleX = displayWidth / videoW;
     const scaleY = displayHeight / videoH;
 
-    // Process all detections
     const processedFaces = [];
     for (let i = 0; i < detections.length; i++) {
       const d = detections[i];
@@ -508,7 +511,7 @@ async function runDetectionLoop() {
       });
     }
 
-    // Atomic canvas redraw - clear and draw all boxes in the same microtask
+    // Atomic canvas redraw
     ctx.clearRect(0, 0, displayWidth, displayHeight);
 
     for (let i = 0; i < processedFaces.length; i++) {
@@ -519,8 +522,8 @@ async function runDetectionLoop() {
           y: face.boxY,
           width: face.boxW,
           height: face.boxH,
-          color: '#00e676',
-          glowColor: 'rgba(0, 230, 118, 0.4)',
+          color: '#3ecf8e',
+          glowColor: 'rgba(62, 207, 142, 0.4)',
           labelText: `😷 Mask (${face.maskConf}%)`
         });
       } else {
@@ -529,14 +532,14 @@ async function runDetectionLoop() {
           y: face.boxY,
           width: face.boxW,
           height: face.boxH,
-          color: '#ff3366',
-          glowColor: 'rgba(255, 51, 102, 0.4)',
+          color: '#f43f5e',
+          glowColor: 'rgba(244, 63, 94, 0.4)',
           labelText: `${face.emotion.emoji} ${face.emotion.name} (${face.emotionConf}%)`
         });
       }
     }
 
-    // Update status from primary face
+    // Update primary face state
     if (processedFaces.length > 0) {
       const primary = processedFaces[0];
       if (primary.isMask) {
@@ -546,94 +549,82 @@ async function runDetectionLoop() {
       }
     }
 
-
   } catch (err) {
     console.error('Detection frame error:', err);
   }
 
-  // Schedule next frame
   state.animationId = requestAnimationFrame(runDetectionLoop);
 }
 
 /**
  * ==============================================================================
- * Section 7: Canvas Drawing Helpers (Rounded Boxes, Glowing Shadows & Labels)
+ * Section 7: Canvas Bounding Box Rendering
  * ==============================================================================
  */
 function drawStyledBoundingBox({ x, y, width, height, color, glowColor, labelText }) {
   ctx.save();
 
-  // Bounding box with glow
   ctx.strokeStyle = color;
-  ctx.lineWidth = 3;
+  ctx.lineWidth = 2.5;
   ctx.shadowColor = glowColor;
-  ctx.shadowBlur = 12;
+  ctx.shadowBlur = 10;
 
-  // Draw smooth rounded rectangle
-  drawRoundedRect(ctx, x, y, width, height, 8);
+  drawRoundedRect(ctx, x, y, width, height, 6);
   ctx.stroke();
 
-  // Semi-transparent box fill tint
-  ctx.fillStyle = glowColor.replace('0.4', '0.08');
+  ctx.fillStyle = glowColor.replace('0.4', '0.06');
   ctx.fill();
 
-  // Corner Accent Highlights
+  // Technical Corner Accents
   ctx.shadowBlur = 0;
-  ctx.lineWidth = 4;
-  const cornerLength = Math.min(18, width * 0.25, height * 0.25);
+  ctx.lineWidth = 3;
+  const cornerLength = Math.min(16, width * 0.25, height * 0.25);
   
-  // Top-left
   ctx.beginPath();
   ctx.moveTo(x, y + cornerLength);
   ctx.lineTo(x, y);
   ctx.lineTo(x + cornerLength, y);
   ctx.stroke();
 
-  // Top-right
   ctx.beginPath();
   ctx.moveTo(x + width - cornerLength, y);
   ctx.lineTo(x + width, y);
   ctx.lineTo(x + width, y + cornerLength);
   ctx.stroke();
 
-  // Bottom-left
   ctx.beginPath();
   ctx.moveTo(x, y + height - cornerLength);
   ctx.lineTo(x, y + height);
   ctx.lineTo(x + cornerLength, y + height);
   ctx.stroke();
 
-  // Bottom-right
   ctx.beginPath();
   ctx.moveTo(x + width - cornerLength, y + height);
   ctx.lineTo(x + width, y + height);
   ctx.lineTo(x + width, y + height - cornerLength);
   ctx.stroke();
 
-  // Label Header Tag above Bounding Box
-  ctx.font = '600 13px Inter, Segoe UI, sans-serif';
+  // Label Header Tag
+  ctx.font = '600 12px Inter, sans-serif';
   const textMetrics = ctx.measureText(labelText);
-  const tagWidth = textMetrics.width + 18;
-  const tagHeight = 26;
+  const tagWidth = textMetrics.width + 16;
+  const tagHeight = 24;
 
-  // Position label above box; if too close to top edge, place inside top of box
   let tagY = y - tagHeight - 6;
   if (tagY < 6) {
     tagY = y + 8;
   }
   const tagX = Math.max(4, Math.min(x, elements.overlay.width - tagWidth - 4));
 
-  // Semi-transparent dark background pill for label
-  ctx.fillStyle = 'rgba(15, 23, 42, 0.88)';
+  ctx.fillStyle = 'rgba(14, 15, 18, 0.92)';
   ctx.strokeStyle = color;
-  ctx.lineWidth = 1.5;
-  drawRoundedRect(ctx, tagX, tagY, tagWidth, tagHeight, 6);
+  ctx.lineWidth = 1.2;
+  drawRoundedRect(ctx, tagX, tagY, tagWidth, tagHeight, 4);
   ctx.fill();
   ctx.stroke();
 
-  // Text inside pill
   ctx.fillStyle = '#ffffff';
-  ctx.fillText(labelText, tagX + 9, tagY + 17);
+  ctx.fillText(labelText, tagX + 8, tagY + 16);
 
   ctx.restore();
 }
@@ -654,144 +645,203 @@ function drawRoundedRect(ctx, x, y, width, height, radius) {
 
 /**
  * ==============================================================================
- * Section 8: UI State Synchronization (Banner, Pill, Counters & Video Border)
+ * Section 8: UI State Synchronization & Telemetry
  * ==============================================================================
  */
 function setMaskDetectedState(confidence) {
-  // Update Top Status Banner
-  elements.statusBanner.className = 'status-banner banner--mask';
+  elements.statusBanner.className = 'compliance-banner banner-mask';
   elements.bannerEmoji.textContent = '😷';
-  elements.bannerHeading.textContent = 'Mask Detected — Access Granted';
-  elements.bannerSubtext.textContent = `Face mask verified with ${confidence}% confidence. Safety protocol satisfied.`;
+  elements.bannerHeading.textContent = 'Mask Detected — Compliant';
+  elements.bannerSubtext.textContent = `Facial mask verified with ${confidence}% confidence. Security protocol passed.`;
+  elements.bannerPill.textContent = 'COMPLIANT';
 
-  // Update Status Pill
-  elements.statusPill.className = 'status-pill pill--mask';
-  elements.pillLabel.textContent = 'Mask Detected';
-  elements.pillConfidence.textContent = `(${confidence}%)`;
+  elements.statusBadge.className = 'status-indicator-badge badge-mask';
+  elements.statusBadgeText.textContent = `MASK VERIFIED (${confidence}%)`;
+  elements.statusFootnote.textContent = 'Active subject satisfies safety compliance.';
+  elements.viewportTag.textContent = 'INSPECTING';
 
-  // Update Video Border
-  elements.videoContainer.className = 'video-container border--mask';
+  elements.videoContainer.className = 'viewport-canvas-wrapper border--mask';
 
-  // Increment counter if transitioning
   if (state.previousState !== 'mask') {
     state.maskDetectedCount++;
     elements.statMaskCount.textContent = state.maskDetectedCount;
     playToneAlert('mask');
+    addAuditLog('Subject #1', 'Mask Verified', `${confidence}%`, 'mask');
     state.previousState = 'mask';
+    updateComplianceRate();
   }
 }
 
 function setNoMaskDetectedState(emotion) {
   const emotionConf = Math.round(emotion.confidence * 100);
 
-  // Update Top Status Banner
-  elements.statusBanner.className = 'status-banner banner--nomask';
+  elements.statusBanner.className = 'compliance-banner banner-nomask';
   elements.bannerEmoji.textContent = emotion.emoji;
   elements.bannerHeading.textContent = `No Mask Detected — Emotion: ${emotion.name}`;
-  elements.bannerSubtext.textContent = `Please put on a face mask. Expression detected: ${emotion.name} (${emotionConf}%).`;
+  elements.bannerSubtext.textContent = `Safety violation. Facial expression classified as ${emotion.name} (${emotionConf}%).`;
+  elements.bannerPill.textContent = 'VIOLATION';
 
-  // Update Status Pill
-  elements.statusPill.className = 'status-pill pill--nomask';
-  elements.pillLabel.textContent = `No Mask • ${emotion.emoji} ${emotion.name}`;
-  elements.pillConfidence.textContent = `(${emotionConf}%)`;
+  elements.statusBadge.className = 'status-indicator-badge badge-nomask';
+  elements.statusBadgeText.textContent = `NO MASK • ${emotion.emoji} ${emotion.name.toUpperCase()}`;
+  elements.statusFootnote.textContent = 'Subject is not wearing required protective mask.';
+  elements.viewportTag.textContent = 'VIOLATION';
 
-  // Update Video Border
-  elements.videoContainer.className = 'video-container border--nomask';
+  elements.videoContainer.className = 'viewport-canvas-wrapper border--nomask';
 
-  // Increment counter if transitioning
   if (state.previousState !== 'nomask') {
     state.noMaskDetectedCount++;
     elements.statNoMaskCount.textContent = state.noMaskDetectedCount;
     playToneAlert('nomask');
+    addAuditLog('Subject #1', `No Mask (${emotion.name})`, `${emotionConf}%`, 'nomask');
     state.previousState = 'nomask';
+    updateComplianceRate();
   }
 }
 
 function updateNoFaceState() {
-  elements.statusBanner.className = 'status-banner banner--scanning';
+  elements.statusBanner.className = 'compliance-banner banner-standby';
   elements.bannerEmoji.textContent = '👤';
   elements.bannerHeading.textContent = 'Scanning For Faces';
-  elements.bannerSubtext.textContent = 'Stand directly in front of the camera to begin detection.';
+  elements.bannerSubtext.textContent = 'Please position yourself within the camera frame for real-time compliance assessment.';
+  elements.bannerPill.textContent = 'STANDBY';
 
-  elements.statusPill.className = 'status-pill pill--standby';
-  elements.pillLabel.textContent = 'No face detected';
-  elements.pillConfidence.textContent = '';
+  elements.statusBadge.className = 'status-indicator-badge badge-standby';
+  elements.statusBadgeText.textContent = 'SEARCHING';
+  elements.statusFootnote.textContent = 'No face detected in live video feed.';
+  elements.viewportTag.textContent = 'STANDBY';
 
-  elements.videoContainer.className = 'video-container';
+  elements.videoContainer.className = 'viewport-canvas-wrapper';
   state.previousState = 'none';
+}
+
+function updateComplianceRate() {
+  const total = state.maskDetectedCount + state.noMaskDetectedCount;
+  if (total === 0) {
+    elements.statComplianceRate.textContent = '100%';
+    elements.barRateFill.style.width = '100%';
+    return;
+  }
+  const rate = Math.round((state.maskDetectedCount / total) * 100);
+  elements.statComplianceRate.textContent = `${rate}%`;
+  elements.barRateFill.style.width = `${rate}%`;
+}
+
+function updateBarMeters() {
+  const maxScale = Math.max(10, state.maskDetectedCount + state.noMaskDetectedCount);
+  const maskPct = Math.min(100, Math.round((state.maskDetectedCount / maxScale) * 100));
+  const noMaskPct = Math.min(100, Math.round((state.noMaskDetectedCount / maxScale) * 100));
+  const activePct = Math.min(100, state.activeFaceCount * 25);
+
+  if (elements.barMaskFill) elements.barMaskFill.style.width = `${maskPct}%`;
+  if (elements.barNoMaskFill) elements.barNoMaskFill.style.width = `${noMaskPct}%`;
+  if (elements.barActiveFill) elements.barActiveFill.style.width = `${activePct}%`;
 }
 
 /**
  * ==============================================================================
- * Section 9: Additional Features (Screenshot Capture, Reset, Audio Toggle)
+ * Section 9: Audit Trail Table Streaming
  * ==============================================================================
  */
+function addAuditLog(target, stateText, conf, type) {
+  const now = new Date();
+  const timeStr = now.toTimeString().split(' ')[0];
 
-// Capture Current Frame + Annotations to PNG
+  const logItem = {
+    time: timeStr,
+    target: target,
+    state: stateText,
+    conf: conf,
+    type: type
+  };
+
+  state.auditLogs.unshift(logItem);
+  if (state.auditLogs.length > CONFIG.MAX_AUDIT_LOGS) {
+    state.auditLogs.pop();
+  }
+
+  renderAuditTable();
+}
+
+function renderAuditTable() {
+  if (!elements.auditTableBody) return;
+
+  elements.auditTableBody.innerHTML = state.auditLogs.map(log => {
+    let pillClass = 'log-pill-info';
+    if (log.type === 'mask') pillClass = 'log-pill-mask';
+    if (log.type === 'nomask') pillClass = 'log-pill-nomask';
+
+    return `
+      <tr>
+        <td class="mono">${log.time}</td>
+        <td>${log.target}</td>
+        <td><span class="log-pill ${pillClass}">${log.state}</span></td>
+        <td class="mono">${log.conf}</td>
+      </tr>
+    `;
+  }).join('');
+}
+
+/**
+ * ==============================================================================
+ * Section 10: Additional Features
+ * ==============================================================================
+ */
 function captureScreenshot() {
   if (!state.isCameraReady) return;
 
-  // Flash animation effect
   elements.cameraFlash.classList.add('flash-active');
   setTimeout(() => {
     elements.cameraFlash.classList.remove('flash-active');
-  }, 120);
+  }, 100);
 
-  // Create high-res composite export canvas
   const exportCanvas = document.createElement('canvas');
   exportCanvas.width = elements.overlay.width || elements.video.videoWidth;
   exportCanvas.height = elements.overlay.height || elements.video.videoHeight;
   const expCtx = exportCanvas.getContext('2d');
 
-  // 1. Draw mirrored video feed
   expCtx.save();
   expCtx.translate(exportCanvas.width, 0);
   expCtx.scale(-1, 1);
   expCtx.drawImage(elements.video, 0, 0, exportCanvas.width, exportCanvas.height);
   expCtx.restore();
 
-  // 2. Composite bounding boxes from overlay canvas
   expCtx.drawImage(elements.overlay, 0, 0);
 
-  // 3. Add timestamp watermark
   expCtx.font = '500 12px Inter, sans-serif';
   expCtx.fillStyle = 'rgba(255, 255, 255, 0.85)';
   const dateStr = new Date().toLocaleString();
   expCtx.fillText(`Smart Mask & Expression Detector • ${dateStr}`, 14, exportCanvas.height - 14);
 
-  // Trigger browser download
   const link = document.createElement('a');
-  link.download = `smart-detector-capture-${Date.now()}.png`;
+  link.download = `smart-mask-audit-${Date.now()}.png`;
   link.href = exportCanvas.toDataURL('image/png');
   link.click();
+
+  addAuditLog('User', 'Capture Saved', 'PNG', 'info');
 }
 
-// Reset Counter Statistics
 function resetStats() {
   state.maskDetectedCount = 0;
   state.noMaskDetectedCount = 0;
   elements.statMaskCount.textContent = '0';
   elements.statNoMaskCount.textContent = '0';
+  updateComplianceRate();
+  updateBarMeters();
+  addAuditLog('User', 'Metrics Reset', '0', 'info');
 }
 
-// Toggle Audio Alerts
 function toggleAudio() {
   state.isAudioMuted = !state.isAudioMuted;
   if (state.isAudioMuted) {
     elements.audioIcon.textContent = '🔇';
-    elements.audioText.textContent = 'Alert Sound: OFF';
+    elements.audioText.textContent = 'Alerts OFF';
   } else {
     elements.audioIcon.textContent = '🔊';
-    elements.audioText.textContent = 'Alert Sound: ON';
-    getAudioContext(); // warm up audio context
+    elements.audioText.textContent = 'Alerts ON';
+    getAudioContext();
   }
 }
 
-/**
- * ==============================================================================
- * Section 10: Event Listeners & Application Bootstrapper
- * ==============================================================================
- */
 function setupEventListeners() {
   elements.btnCapture.addEventListener('click', captureScreenshot);
   elements.btnAudioToggle.addEventListener('click', toggleAudio);
@@ -808,36 +858,28 @@ function setupEventListeners() {
     }
   });
 
-  // Re-enable AudioContext on first user interaction
   document.body.addEventListener('click', () => {
     getAudioContext();
   }, { once: true });
 }
 
-// Main Bootstrapper
 async function initApp() {
   setupEventListeners();
 
-  // 1. Load Neural Network Models
   const modelsLoaded = await loadAllModels();
   if (!modelsLoaded) {
-    elements.loadingDetail.textContent = 'Could not load neural models. Ensure files in /models are served via HTTP.';
+    elements.loadingDetail.textContent = 'Could not load neural models.';
     return;
   }
 
-  // 2. Initialize Camera Feed
   const cameraOk = await setupWebcam();
   if (!cameraOk) {
     return;
   }
 
-  // 3. Hide loading screen
   elements.loadingOverlay.classList.add('hidden');
-
-  // 4. Start detection loop
-  console.log('Smart Mask & Expression Detector initialized successfully.');
+  console.log('AI Console initialized successfully.');
   runDetectionLoop();
 }
 
-// Kick off when DOM is ready
 window.addEventListener('DOMContentLoaded', initApp);
