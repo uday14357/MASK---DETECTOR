@@ -55,6 +55,8 @@ const elements = {
   videoContainer: document.getElementById('videoContainer'),
   
   valStatus: document.getElementById('valStatus'),
+  valMaskModel: document.getElementById('valMaskModel'),
+  valInferencesCount: document.getElementById('valInferencesCount'),
   statusSpinner: document.getElementById('statusSpinner'),
   latencyValue: document.getElementById('latencyValue'),
   nodeSub: document.getElementById('nodeSub'),
@@ -181,10 +183,12 @@ async function loadAllModels() {
         customMaskModel = await window.tmImage.load(CONFIG.MASK_MODEL_JSON, CONFIG.MASK_METADATA_JSON);
         state.isMaskModelReady = true;
         state.maskModelType = 'teachable_machine';
+        if (elements.valMaskModel) elements.valMaskModel.textContent = 'Teachable Machine (TF.js)';
       }
     } catch (tmErr) {
       state.isMaskModelReady = true;
       state.maskModelType = 'landmark_heuristic';
+      if (elements.valMaskModel) elements.valMaskModel.textContent = 'Landmark Occlusion Net';
     }
 
     elements.loadingBar.style.width = '100%';
@@ -392,6 +396,9 @@ async function runDetectionLoop() {
     elements.latencyValue.textContent = `${state.lastInferenceDuration} ms`;
     state.totalInferences++;
     elements.statTotalRequests.textContent = `${state.totalInferences.toLocaleString()} Total Inferences`;
+    if (elements.valInferencesCount) {
+      elements.valInferencesCount.textContent = `${state.totalInferences.toLocaleString()} Inferences`;
+    }
 
     state.activeFaceCount = detections.length;
     elements.faceCountValue.textContent = `${detections.length} Faces`;
