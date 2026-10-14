@@ -2,335 +2,188 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Smart Mask & Expression Detector | AI Console</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Smart Mask & Expression Detector</title>
   <meta name="description" content="Production-ready real-time webcam Face Mask & Facial Expression Detection powered by face-api.js and TensorFlow.js.">
-  <meta name="theme-color" content="#121212">
+  <meta name="theme-color" content="#1a1a2e">
 
-  <!-- Inter for UI & JetBrains Mono for system metrics -->
+  <!-- Google Fonts: Inter & Outfit -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
 
+  <!-- Core Stylesheet -->
   <link rel="stylesheet" href="style.css">
 
-  <!-- face-api.js & TensorFlow.js Libraries -->
+  <!-- face-api.js Library (TinyFaceDetector, FaceLandmark68Net, FaceExpressionNet) -->
   <script src="lib/face-api.min.js"></script>
+
+  <!-- TensorFlow.js Core & Teachable Machine Image Library -->
   <script src="lib/tf.min.js"></script>
   <script src="lib/teachablemachine-image.min.js"></script>
 </head>
 <body>
-  <div class="supabase-shell">
-    
-    <!-- 1. Left Vertical Icon Sidebar -->
-    <aside class="sidebar-icons">
-      <div class="sidebar-top">
-        <div class="brand-logo" title="Smart Mask Detector">
-          <svg viewBox="0 0 24 24" fill="none" class="brand-svg">
-            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="#3ecf8e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-        </div>
-
-        <nav class="icon-nav">
-          <button class="nav-icon-btn active" title="Detection Console">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><circle cx="15.5" cy="8.5" r="1.5"/><path d="M9 15c1 1.5 5 1.5 6 0"/></svg>
-          </button>
-          <button class="nav-icon-btn" title="Model Weights">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></svg>
-          </button>
-          <button class="nav-icon-btn" title="Telemetry Metrics">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-          </button>
-        </nav>
-      </div>
-
-      <div class="sidebar-bottom">
-        <a href="https://github.com/uday14357/MASK---DETECTOR" target="_blank" rel="noreferrer" class="nav-icon-btn" title="GitHub Repository">
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
-        </a>
-      </div>
-    </aside>
-
-    <!-- Main Content Shell -->
-    <div class="main-shell">
+  <div class="app-wrapper">
+    <!-- Main App Container (Max-Width 700px) -->
+    <main class="app-container" id="mainContainer">
       
-      <!-- 2. Clean Top Navigation Bar -->
-      <header class="top-nav">
-        <div class="nav-left">
-          <span class="lightning-icon">⚡</span>
-          <span class="crumb org-name">Smart Mask & Expression Detector</span>
-          <span class="slash">/</span>
-          <span class="badge badge-prod">
-            <span class="pulse-dot"></span> PRODUCTION LIVE
-          </span>
-          <span class="badge badge-private">
-            100% CLIENT-SIDE
-          </span>
+      <!-- Top App Header -->
+      <header class="app-header">
+        <div class="logo-badge">
+          <span class="logo-icon">🛡️</span>
+          <div class="logo-pulse"></div>
         </div>
-
-        <div class="nav-right">
-          <!-- Real Audio Toggle -->
-          <button class="nav-btn" id="btnAudioToggle" title="Toggle audio alert cues">
-            <span id="audioIcon">🔊</span>
-            <span id="audioText">Alert Sound: ON</span>
-          </button>
-          
-          <!-- Real Screenshot Capture -->
-          <button class="nav-btn" id="btnCapture" title="Capture current frame with bounding boxes">
-            <span>📷</span>
-            <span>Snapshot</span>
-          </button>
-
-          <!-- Real Reset Counters -->
-          <button class="nav-btn" id="btnResetStats" title="Reset detection counters">
-            <span>↺</span>
-            <span>Reset Stats</span>
-          </button>
-
-          <!-- GitHub Source Link -->
-          <a href="https://github.com/uday14357/MASK---DETECTOR" target="_blank" rel="noreferrer" class="nav-btn nav-btn-outline" title="View Source on GitHub">
-            <svg class="github-icon" viewBox="0 0 24 24" fill="currentColor" width="13" height="13">
-              <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
-            </svg>
-            <span>GitHub</span>
-          </a>
+        <h1 class="app-title">Smart Mask & Expression Detector</h1>
+        <p class="app-subtitle">Real-Time Edge AI • Dual Neural Stream Analytics</p>
+        
+        <!-- Live System Status Badges -->
+        <div class="system-pills" id="systemPills">
+          <span class="system-pill" id="pillCamera">
+            <span class="dot"></span> Camera
+          </span>
+          <span class="system-pill" id="pillFaceApi">
+            <span class="dot"></span> Face-API
+          </span>
+          <span class="system-pill" id="pillMaskModel">
+            <span class="dot"></span> Mask Model
+          </span>
         </div>
       </header>
 
-      <!-- 3. Dashboard Body -->
-      <main class="dashboard-body">
-        
-        <!-- Project Header Title -->
-        <div class="project-header">
-          <div class="title-row">
-            <h1 class="project-h1">Real-Time Face Mask & Expression Engine</h1>
+      <!-- Large Top Status Banner -->
+      <section class="status-banner banner--loading" id="statusBanner" aria-live="polite">
+        <div class="banner-icon-box" id="bannerIconBox">
+          <span class="banner-emoji" id="bannerEmoji">⏳</span>
+        </div>
+        <div class="banner-text-box">
+          <h2 class="banner-heading" id="bannerHeading">Initializing AI Models</h2>
+          <p class="banner-subtext" id="bannerSubtext">Please wait while neural weights and webcam initialize...</p>
+        </div>
+      </section>
+
+      <!-- Video Viewport Section -->
+      <section class="viewport-section">
+        <div class="video-container" id="videoContainer">
+          <!-- Mirrored Video Stream -->
+          <video id="webcam" autoplay playsinline muted></video>
+          
+          <!-- Perfectly Aligned Canvas Overlay for Bounding Boxes -->
+          <canvas id="overlay"></canvas>
+
+          <!-- Real-Time HUD Overlay (Top Corners of Video) -->
+          <div class="viewport-hud">
+            <div class="hud-badge hud-fps" id="hudFps">
+              <span class="hud-icon">⚡</span> <span id="fpsValue">0</span> FPS
+            </div>
+            <div class="hud-badge hud-faces" id="hudFaces">
+              <span class="hud-icon">👤</span> <span id="faceCountValue">0</span> Faces
+            </div>
           </div>
-          <div class="url-row">
-            <span class="url-label">Production Deployment:</span>
-            <span class="url-val mono" id="projectUrl">https://mask-detector-git-main-pusamuday857-5426.vercel.app</span>
-            <button class="btn-copy" id="btnCopyUrl" title="Copy URL">
-              <span>Copy</span>
+
+          <!-- Loading Screen Overlay inside Video Container -->
+          <div class="overlay-modal" id="loadingOverlay">
+            <div class="spinner-ring"></div>
+            <h3 class="overlay-title" id="loadingTitle">Loading Neural Networks</h3>
+            <p class="overlay-desc" id="loadingDetail">Loading TinyFaceDetector, Landmarks & Expression models...</p>
+            <div class="progress-bar-container">
+              <div class="progress-bar-fill" id="loadingBar"></div>
+            </div>
+          </div>
+
+          <!-- Camera Access Denied / Error Overlay -->
+          <div class="overlay-modal modal--error hidden" id="cameraErrorModal">
+            <div class="error-icon">🚫</div>
+            <h3 class="overlay-title">Camera Permission Required</h3>
+            <p class="overlay-desc" id="cameraErrorMsg">Webcam access was denied or is unavailable. Please allow camera permissions in your browser address bar and reload.</p>
+            <button class="action-btn btn-retry" id="btnRetryCamera">
+              <span class="btn-icon">🔄</span> Retry Camera Access
             </button>
           </div>
+
+          <!-- Screenshot Flash Animation Element -->
+          <div class="camera-flash" id="cameraFlash"></div>
+        </div>
+      </section>
+
+      <!-- Pill-Shaped Status Box Below Video -->
+      <section class="status-pill-section">
+        <div class="status-pill pill--standby" id="statusPill">
+          <span class="pill-dot" id="pillDot"></span>
+          <span class="pill-label" id="pillLabel">Initializing camera & models...</span>
+          <span class="pill-confidence" id="pillConfidence"></span>
+        </div>
+      </section>
+
+      <!-- Analytics & Counter Dashboard -->
+      <section class="dashboard-section">
+        <div class="stat-card">
+          <div class="stat-icon-wrapper mask-icon-bg">😷</div>
+          <div class="stat-content">
+            <span class="stat-value" id="statMaskCount">0</span>
+            <span class="stat-label">Mask Detected</span>
+          </div>
         </div>
 
-        <!-- 4. Middle Section: 6 Genuine Metric Cards (Left) + Dotted Grid Canvas (Right) -->
-        <div class="workspace-grid">
-          
-          <!-- Left: 6 Real System & Model Metrics (2x3 Grid) -->
-          <div class="metric-cards-grid">
-            
-            <!-- Card 1: PIPELINE STATUS -->
-            <div class="supabase-card">
-              <div class="card-top-label">
-                <span class="card-icon status-spinner" id="statusSpinner">↻</span>
-                <span class="card-title">PIPELINE STATUS</span>
-              </div>
-              <div class="card-main-val highlight-green" id="valStatus">Initializing Models...</div>
-            </div>
-
-            <!-- Card 2: FACE DETECTOR -->
-            <div class="supabase-card">
-              <div class="card-top-label">
-                <span class="card-icon">🎯</span>
-                <span class="card-title">FACE DETECTOR</span>
-              </div>
-              <div class="card-main-val mono">TinyFaceDetector (320px)</div>
-            </div>
-
-            <!-- Card 3: MASK CLASSIFIER -->
-            <div class="supabase-card">
-              <div class="card-top-label">
-                <span class="card-icon">😷</span>
-                <span class="card-title">MASK CLASSIFIER</span>
-              </div>
-              <div class="card-main-val mono highlight-cyan" id="valMaskModel">Teachable Machine (TF.js)</div>
-            </div>
-
-            <!-- Card 4: EMOTION ENGINE -->
-            <div class="supabase-card">
-              <div class="card-top-label">
-                <span class="card-icon">😊</span>
-                <span class="card-title">EMOTION ENGINE</span>
-              </div>
-              <div class="card-main-val mono">FaceExpressionNet (7 Classes)</div>
-            </div>
-
-            <!-- Card 5: INFERENCE LATENCY -->
-            <div class="supabase-card">
-              <div class="card-top-label">
-                <span class="card-icon">⏱️</span>
-                <span class="card-title">INFERENCE LATENCY</span>
-              </div>
-              <div class="card-main-val mono" id="latencyValue">-- ms</div>
-            </div>
-
-            <!-- Card 6: TOTAL INFERENCES -->
-            <div class="supabase-card">
-              <div class="card-top-label">
-                <span class="card-icon">⚡</span>
-                <span class="card-title">TOTAL INFERENCES</span>
-              </div>
-              <div class="card-main-val mono" id="valInferencesCount">0 Inferences</div>
-            </div>
-
+        <div class="stat-card">
+          <div class="stat-icon-wrapper nomask-icon-bg">⚠️</div>
+          <div class="stat-content">
+            <span class="stat-value" id="statNoMaskCount">0</span>
+            <span class="stat-label">No Mask</span>
           </div>
-
-          <!-- Right: Massive Dot-Grid Architecture Canvas with Live Video Feed -->
-          <div class="dot-grid-canvas">
-            
-            <div class="canvas-top-bar">
-              <div class="node-tag">
-                <span class="node-dot"></span>
-                <span>Live Camera Viewport</span>
-              </div>
-              <div class="canvas-controls">
-                <span class="canvas-hud mono" id="fpsValue">0 FPS</span>
-                <span class="canvas-hud mono" id="faceCountValue">0 Faces</span>
-              </div>
-            </div>
-
-            <!-- Floating Video Node in Center of Dot Grid -->
-            <div class="floating-node-card" id="videoContainer">
-              
-              <div class="node-card-header">
-                <div class="node-title-group">
-                  <div class="node-icon-box">
-                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#3ecf8e" stroke-width="2"><path d="M23 7l-7 5 7 5V7z"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
-                  </div>
-                  <div>
-                    <div class="node-heading">Primary Camera Stream</div>
-                    <div class="node-sub heading-mono" id="nodeSub">640 × 480 px • Mirrored User Feed</div>
-                  </div>
-                </div>
-                
-                <span class="node-status-pill pill-standby" id="bannerPill">CHECKING</span>
-              </div>
-
-              <!-- Camera Viewport Layer -->
-              <div class="node-viewport-frame">
-                <video id="webcam" autoplay playsinline muted></video>
-                <canvas id="overlay"></canvas>
-
-                <!-- Corner Crosshairs -->
-                <div class="crosshair tl"></div>
-                <div class="crosshair tr"></div>
-                <div class="crosshair bl"></div>
-                <div class="crosshair br"></div>
-
-                <!-- Camera Flash Animation -->
-                <div class="camera-flash" id="cameraFlash"></div>
-
-                <!-- Loading Spinner Screen -->
-                <div class="viewport-loader" id="loadingOverlay">
-                  <div class="loader-spinner"></div>
-                  <div class="loader-txt" id="loadingDetail">Checking camera stream and weights...</div>
-                  <div class="loader-bar-track">
-                    <div class="loader-bar-fill" id="loadingBar"></div>
-                  </div>
-                </div>
-
-                <!-- Camera Error Screen -->
-                <div class="viewport-error hidden" id="cameraErrorModal">
-                  <div class="error-emoji">⚠️</div>
-                  <div class="error-h">Webcam Access Blocked</div>
-                  <div class="error-p" id="cameraErrorMsg">Please allow webcam access in your browser and click retry.</div>
-                  <button class="btn-retry" id="btnRetryCamera">Retry Camera</button>
-                </div>
-              </div>
-
-              <!-- Status Notification Strip at Bottom of Node -->
-              <div class="node-status-strip strip-standby" id="statusBanner">
-                <span class="strip-emoji" id="bannerEmoji">👤</span>
-                <span class="strip-text" id="bannerHeading">Scanning for Faces...</span>
-                <span class="strip-sub" id="bannerSubtext">Position yourself in camera frame.</span>
-              </div>
-
-            </div>
-
-          </div>
-
         </div>
 
-        <!-- 5. Bottom Row: 4 Real Telemetry Metrics -->
-        <div class="bottom-telemetry-section">
-          
-          <div class="telemetry-summary-bar">
-            <div class="summary-left">
-              <span class="hash-icon">#</span>
-              <span class="summary-strong" id="statTotalRequests">0 Total Inferences</span>
-              <span class="summary-divider">•</span>
-              <span class="summary-rate" id="statSuccessRate">100.0% Pass Rate</span>
-            </div>
-            <div class="summary-right mono text-muted">
-              Zero External Cloud Transmission • Edge AI
-            </div>
+        <div class="stat-card">
+          <div class="stat-icon-wrapper active-icon-bg">👥</div>
+          <div class="stat-content">
+            <span class="stat-value" id="statActiveFaces">0</span>
+            <span class="stat-label">Active Faces</span>
           </div>
-
-          <!-- 4 Focused Telemetry Columns (No dummy warning/error text) -->
-          <div class="four-col-grid">
-            
-            <!-- Col 1: MASK DETECTIONS -->
-            <div class="telemetry-col">
-              <div class="col-head">
-                <span class="col-name">MASK VERIFIED</span>
-                <span class="status-dot dot-green"></span>
-              </div>
-              <div class="col-num mono highlight-green" id="statMaskCount">0</div>
-              <div class="col-sub">Verified Mask Instances</div>
-              <div class="col-chart-box">
-                <div class="sparkline-bar bar-green" id="sparkMask" style="height: 4px;"></div>
-              </div>
-            </div>
-
-            <!-- Col 2: VIOLATIONS (NO MASK) -->
-            <div class="telemetry-col">
-              <div class="col-head">
-                <span class="col-name">NO MASK VIOLATIONS</span>
-                <span class="status-dot dot-red"></span>
-              </div>
-              <div class="col-num mono highlight-red" id="statNoMaskCount">0</div>
-              <div class="col-sub">Unmasked Face Detections</div>
-              <div class="col-chart-box">
-                <div class="sparkline-bar bar-red" id="sparkNoMask" style="height: 4px;"></div>
-              </div>
-            </div>
-
-            <!-- Col 3: ACTIVE FACES -->
-            <div class="telemetry-col">
-              <div class="col-head">
-                <span class="col-name">ACTIVE SUBJECTS</span>
-                <span class="status-dot dot-cyan"></span>
-              </div>
-              <div class="col-num mono" id="statActiveFaces">0</div>
-              <div class="col-sub">Simultaneous Faces in View</div>
-              <div class="col-chart-box">
-                <div class="sparkline-bar bar-cyan" id="sparkActive" style="height: 4px;"></div>
-              </div>
-            </div>
-
-            <!-- Col 4: DOMINANT EMOTION -->
-            <div class="telemetry-col">
-              <div class="col-head">
-                <span class="col-name">DOMINANT EMOTION</span>
-                <span class="status-dot dot-purple"></span>
-              </div>
-              <div class="col-num mono" id="statEmotionVal">Neutral</div>
-              <div class="col-sub">Current Unmasked Facial Expression</div>
-              <div class="col-chart-box">
-                <div class="sparkline-bar bar-purple" id="sparkEmotion" style="height: 4px;"></div>
-              </div>
-            </div>
-
-          </div>
-
         </div>
+      </section>
 
-      </main>
+      <!-- Action Controls Bar -->
+      <section class="controls-section">
+        <button class="action-btn" id="btnCapture" title="Save current detection frame with bounding boxes">
+          <span class="btn-icon">📸</span> Capture Photo
+        </button>
+        <button class="action-btn" id="btnAudioToggle" title="Toggle audio alert cues">
+          <span class="btn-icon" id="audioIcon">🔊</span> <span id="audioText">Alert Sound: ON</span>
+        </button>
+        <button class="action-btn btn-secondary" id="btnResetStats" title="Reset detection counters">
+          <span class="btn-icon">↺</span> Reset
+        </button>
+      </section>
 
-    </div>
+      <!-- Bottom Legend -->
+      <section class="legend-section">
+        <h3 class="legend-title">Detection Legend</h3>
+        <div class="legend-items">
+          <div class="legend-item">
+            <span class="legend-dot dot--mask"></span>
+            <span class="legend-text"><strong>Mask Detected:</strong> Green Bounding Box + 😷 Mask (confidence%)</span>
+          </div>
+          <div class="legend-item">
+            <span class="legend-dot dot--nomask"></span>
+            <span class="legend-text"><strong>No Mask:</strong> Red Bounding Box + 😊 Detected Emotion (confidence%)</span>
+          </div>
+          <div class="legend-item">
+            <span class="legend-dot dot--tracking"></span>
+            <span class="legend-text"><strong>Multi-Face Engine:</strong> Tracks and classifies multiple people simultaneously</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Footer with Model Information -->
+      <footer class="app-footer">
+        <p class="footer-meta">
+          Powered by <strong>face-api.js</strong> & <strong>TensorFlow.js</strong> • Client-side Zero Data Transmission
+        </p>
+      </footer>
+
+    </main>
   </div>
 
+  <!-- Application Logic -->
   <script src="script.js"></script>
 </body>
 </html>
