@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Smart Mask & Expression Detector</title>
+  <meta name="description" content="Production-ready real-time webcam Face Mask & Facial Expression Detection powered by face-api.js and TensorFlow.js.">
+  <meta name="theme-color" content="#1a1a2e">
+
+  <!-- Google Fonts: Inter & Outfit -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- Core Stylesheet -->
+  <link rel="stylesheet" href="style.css">
+
+  <!-- face-api.js Library (TinyFaceDetector, FaceLandmark68Net, FaceExpressionNet) -->
+  <script src="lib/face-api.min.js"></script>
+
+  <!-- TensorFlow.js Core & Teachable Machine Image Library -->
+  <script src="lib/tf.min.js"></script>
+  <script src="lib/teachablemachine-image.min.js"></script>
+</head>
+<body>
+  <div class="app-wrapper">
+    <!-- Main App Container (Max-Width 700px) -->
+    <main class="app-container" id="mainContainer">
+      
+      <!-- Top App Header -->
+      <header class="app-header">
+        <div class="logo-badge">
+          <span class="logo-icon">🛡️</span>
+          <div class="logo-pulse"></div>
+        </div>
+        <h1 class="app-title">Smart Mask & Expression Detector</h1>
+        <p class="app-subtitle">Real-Time Edge AI • Dual Neural Stream Analytics</p>
+        
+        <!-- Live System Status Badges -->
+        <div class="system-pills" id="systemPills">
+          <span class="system-pill" id="pillCamera">
+            <span class="dot"></span> Camera
+          </span>
+          <span class="system-pill" id="pillFaceApi">
+            <span class="dot"></span> Face-API
+          </span>
+          <span class="system-pill" id="pillMaskModel">
+            <span class="dot"></span> Mask Model
+          </span>
+        </div>
+      </header>
+
+      <!-- Large Top Status Banner -->
+      <section class="status-banner banner--loading" id="statusBanner" aria-live="polite">
+        <div class="banner-icon-box" id="bannerIconBox">
+          <span class="banner-emoji" id="bannerEmoji">⏳</span>
+        </div>
+        <div class="banner-text-box">
+          <h2 class="banner-heading" id="bannerHeading">Initializing AI Models</h2>
+          <p class="banner-subtext" id="bannerSubtext">Please wait while neural weights and webcam initialize...</p>
+        </div>
+      </section>
+
+      <!-- Video Viewport Section -->
+      <section class="viewport-section">
+        <div class="video-container" id="videoContainer">
+          <!-- Mirrored Video Stream -->
+          <video id="webcam" autoplay playsinline muted></video>
+          
+          <!-- Perfectly Aligned Canvas Overlay for Bounding Boxes -->
+          <canvas id="overlay"></canvas>
+
+          <!-- Real-Time HUD Overlay (Top Corners of Video) -->
+          <div class="viewport-hud">
+            <div class="hud-badge hud-fps" id="hudFps">
+              <span class="hud-icon">⚡</span> <span id="fpsValue">0</span> FPS
+            </div>
+            <div class="hud-badge hud-faces" id="hudFaces">
+              <span class="hud-icon">👤</span> <span id="faceCountValue">0</span> Faces
+            </div>
+          </div>
+
+          <!-- Loading Screen Overlay inside Video Container -->
+          <div class="overlay-modal" id="loadingOverlay">
+            <div class="spinner-ring"></div>
+            <h3 class="overlay-title" id="loadingTitle">Loading Neural Networks</h3>
+            <p class="overlay-desc" id="loadingDetail">Loading TinyFaceDetector, Landmarks & Expression models...</p>
+            <div class="progress-bar-container">
+              <div class="progress-bar-fill" id="loadingBar"></div>
+            </div>
+          </div>
+
+          <!-- Camera Access Denied / Error Overlay -->
+          <div class="overlay-modal modal--error hidden" id="cameraErrorModal">
+            <div class="error-icon">🚫</div>
+            <h3 class="overlay-title">Camera Permission Required</h3>
+            <p class="overlay-desc" id="cameraErrorMsg">Webcam access was denied or is unavailable. Please allow camera permissions in your browser address bar and reload.</p>
+            <button class="action-btn btn-retry" id="btnRetryCamera">
+              <span class="btn-icon">🔄</span> Retry Camera Access
+            </button>
+          </div>
+
+          <!-- Screenshot Flash Animation Element -->
+          <div class="camera-flash" id="cameraFlash"></div>
+        </div>
+      </section>
+
+      <!-- Pill-Shaped Status Box Below Video -->
+      <section class="status-pill-section">
+        <div class="status-pill pill--standby" id="statusPill">
+          <span class="pill-dot" id="pillDot"></span>
+          <span class="pill-label" id="pillLabel">Initializing camera & models...</span>
+          <span class="pill-confidence" id="pillConfidence"></span>
+        </div>
+      </section>
+
+      <!-- Analytics & Counter Dashboard -->
+      <section class="dashboard-section">
+        <div class="stat-card">
+          <div class="stat-icon-wrapper mask-icon-bg">😷</div>
+          <div class="stat-content">
+            <span class="stat-value" id="statMaskCount">0</span>
+            <span class="stat-label">Mask Detected</span>
+          </div>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-icon-wrapper nomask-icon-bg">⚠️</div>
+          <div class="stat-content">
+            <span class="stat-value" id="statNoMaskCount">0</span>
+            <span class="stat-label">No Mask</span>
+          </div>
+        </div>
+
+        <div class="stat-card">
+          <div class="stat-icon-wrapper active-icon-bg">👥</div>
+          <div class="stat-content">
+            <span class="stat-value" id="statActiveFaces">0</span>
+            <span class="stat-label">Active Faces</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Action Controls Bar -->
+      <section class="controls-section">
+        <button class="action-btn" id="btnCapture" title="Save current detection frame with bounding boxes">
+          <span class="btn-icon">📸</span> Capture Photo
+        </button>
+        <button class="action-btn" id="btnAudioToggle" title="Toggle audio alert cues">
+          <span class="btn-icon" id="audioIcon">🔊</span> <span id="audioText">Alert Sound: ON</span>
+        </button>
+        <button class="action-btn btn-secondary" id="btnResetStats" title="Reset detection counters">
+          <span class="btn-icon">↺</span> Reset
+        </button>
+      </section>
+
+      <!-- Bottom Legend -->
+      <section class="legend-section">
+        <h3 class="legend-title">Detection Legend</h3>
+        <div class="legend-items">
+          <div class="legend-item">
+            <span class="legend-dot dot--mask"></span>
+            <span class="legend-text"><strong>Mask Detected:</strong> Green Bounding Box + 😷 Mask (confidence%)</span>
+          </div>
+          <div class="legend-item">
+            <span class="legend-dot dot--nomask"></span>
+            <span class="legend-text"><strong>No Mask:</strong> Red Bounding Box + 😊 Detected Emotion (confidence%)</span>
+          </div>
+          <div class="legend-item">
+            <span class="legend-dot dot--tracking"></span>
+            <span class="legend-text"><strong>Multi-Face Engine:</strong> Tracks and classifies multiple people simultaneously</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Footer with Model Information -->
+      <footer class="app-footer">
+        <p class="footer-meta">
+          Powered by <strong>face-api.js</strong> & <strong>TensorFlow.js</strong> • Client-side Zero Data Transmission
+        </p>
+      </footer>
+
+    </main>
+  </div>
+
+  <!-- Application Logic -->
+  <script src="script.js"></script>
+</body>
+</html>
